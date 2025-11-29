@@ -1,0 +1,12 @@
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+httpx==0.28.1
+redis[hiredis]==5.0.1
+sqlalchemy==2.0.23
+pydantic==2.6.3
+numpy==1.26.4
+scikit-learn==1.4.0
+python-dotenv==1.0.1
+google-cloud-pubsub==2.21.0
+fastmcp==2.13.1
+sse-starlette==1.8.2

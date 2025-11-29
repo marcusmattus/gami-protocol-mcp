@@ -1,0 +1,132 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: gami_mcp_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gami_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: gami_mcp_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - gami_net
+
+  quest_agent:
+    build:
+      context: ../Gami_Agents
+      dockerfile: Dockerfile.quest
+    container_name: quest_agent
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - gami_net
+
+  economy_agent:
+    build:
+      context: ../Gami_Agents
+      dockerfile: Dockerfile.economy
+    container_name: economy_agent
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - gami_net
+
+  security_agent:
+    build:
+      context: ../Gami_Agents
+      dockerfile: Dockerfile.security
+    container_name: security_agent
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - gami_net
+
+  mcp_supervisor:
+    build:
+      context: ../Gami_Agents
+      dockerfile: Dockerfile.supervisor
+    container_name: mcp_supervisor
+    environment:
+      QUEST_AGENT_URL: http://quest_agent:8001
+      ECONOMY_AGENT_URL: http://economy_agent:8002
+      SECURITY_AGENT_URL: http://security_agent:8003
+      MCP_TRANSPORT: sse
+      SUPERVISOR_HOST: 0.0.0.0
+      SUPERVISOR_PORT: 8800
+      SUPERVISOR_HTTP_PATH: mcp
+    ports:
+      - "8800:8800"
+    depends_on:
+      - quest_agent
+      - economy_agent
+      - security_agent
+    networks:
+      - gami_net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: gami_mcp_backend
+    env_file:
+      - ./.env
+    ports:
+      - "9000:9000"
+      - "9300:9300"
+    volumes:
+      - ../Gami_Agents:/app/Gami_Agents:ro
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials/service-account.json}:/app/credentials/gcp-service-account.json:ro
+    depends_on:
+      - quest_agent
+      - economy_agent
+      - security_agent
+      - redis
+      - postgres
+      - mcp_supervisor
+    networks:
+      - gami_net
+
+  frontend:
+    build:
+      context: ../gami-protocol-universal-engagement-layer
+      dockerfile: Dockerfile
+    container_name: gami_mcp_frontend
+    environment:
+      VITE_API_BASE: http://backend:9000
+      VITE_SSE_URL: http://backend:9000/api/stream
+    ports:
+      - "5173:4173"
+    depends_on:
+      - backend
+    networks:
+      - gami_net
+
+volumes:
+  postgres_data:
+
+networks:
+  gami_net:
+    driver: bridge
